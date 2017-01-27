@@ -7,9 +7,20 @@
 <title>pkGL - texture + shader grbg</title>
 <link type="text/css" href="resources/webgl-tutorials.css" rel="stylesheet" />
 </head>
-<body>
+
+<div class="description">
+Drag sliders to translate, rotate, and scale.
+</div>
 <canvas id="c"></canvas>
+<div id="uiContainer">
+  <div id="ui">
+    <div id="Npts"></div>
+    <div id="Freq"></div>    
+  </div>
+</div>
 </body>
+
+
 
 <!--
 for most samples webgl-utils only provides shader compiling/linking and
@@ -104,7 +115,9 @@ function main()
   
   // look up where the texture coordinates need to go.
   var texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
- 
+  
+  var Npoints   = 4096;
+  var freqScale = 1;
   
   ///////////////////////////////////////////////////////////
   // Create a buffer to put three 2d clip space points in
@@ -122,25 +135,46 @@ function main()
   var textures = [];  
   setupTextures();
   
-  
   drawScene();
+  
+  // Setup a ui.
+  webglLessonsUI.setupSlider("#Npts", {value: Npoints,     slide: updatePoints(0), max: 16384 });
+  webglLessonsUI.setupSlider("#Freq", {value: freqScale,   slide: updateFreq(0),   max: 100}    );
+  
+  function updatePoints(index) {
+    return function(event, ui) {
+      Npoints = ui.value;
+	  setupTextures();
+      drawScene();
+    }
+  }
+
+  function updateFreq(index) {
+    return function(event, ui) {
+      freqScale = ui.value;
+	  setupTextures();
+      drawScene();
+    }
+  }
     
   function setupTextures()
   {
+	    textures   = [];
 	    var tex    = gl.createTexture();
 	    gl.bindTexture(gl.TEXTURE_2D, tex);
 
 	    var freq   = 4;		
-		var width  = 4096; // Nx1 pixel 1d texture
+		var width  = Npoints ; // Nx1 pixel 1d texture
 		var height = 1;
 		var sz     = 4;
 		var oneDTextureTexels = new Uint8Array(width * sz);
 		for (var ii = 0; ii < width; ++ii) 
 		{			
-			var s = 128 + 127 * Math.sin( ii * 2 * Math.PI / width * freq );
-			oneDTextureTexels[ii*4 + 0] = s;
-			oneDTextureTexels[ii*4 + 1] = s;
-			oneDTextureTexels[ii*4 + 2] = s;
+			var s1 = 128 + 127 * Math.sin( ii * 2 * Math.PI / width * freqScale );
+			var s2 = 128 + 127 * Math.sin( ii * 2 * Math.PI / width * 4);
+			oneDTextureTexels[ii*4 + 0] = s1;
+			oneDTextureTexels[ii*4 + 1] = s2;
+			oneDTextureTexels[ii*4 + 2] = s2*s1 / 255;
 			oneDTextureTexels[ii*4 + 3] = 255;
 		}
 		
