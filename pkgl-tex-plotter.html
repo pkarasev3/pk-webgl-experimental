@@ -1,0 +1,251 @@
+<!-- Licensed under a BSD license. See license.html for license -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>pkGL - texture + shader grbg</title>
+<link type="text/css" href="resources/webgl-tutorials.css" rel="stylesheet" />
+</head>
+<body>
+<canvas id="c"></canvas>
+</body>
+
+<!--
+for most samples webgl-utils only provides shader compiling/linking and
+canvas resizing because why clutter the examples with code that's the same in every sample.
+See http://webglfundamentals.org/webgl/lessons/webgl-boilerplate.html
+and http://webglfundamentals.org/webgl/lessons/webgl-resizing-the-canvas.html
+for webgl-utils, m3, m4, and webgl-lessons-ui.
+-->
+<script src="resources/webgl-utils.js"></script>
+<script src="resources/webgl-lessons-ui.js"></script>
+<script src="resources/webgl-lessons-helper.js"></script> <!-- you can and should delete this script. it is only used on the site to help with errors -->
+<script src="resources/m3.js"></script>
+<script src="resources/m4.js"></script>
+
+<!-- vertex shader -->
+<script id="2d-vertex-shader" type="x-shader/x-vertex">
+
+// input GRBG
+attribute vec2 a_texCoord;
+attribute vec2 a_position;
+
+// xfrm  GRBG
+uniform mat3 u_matrix;
+
+// output GRBG
+varying vec4 v_color;
+varying vec2 v_texCoord;
+
+void main() {
+  // Multiply the position by the matrix.
+  gl_Position = vec4((u_matrix * vec3(a_position, 1)).xy, 0, 1);
+
+  // Convert from clipspace to colorspace.
+  // Clipspace goes -1.0 to +1.0
+  // Colorspace goes from 0.0 to 1.0
+  v_color = gl_Position * 0.5 + 0.5;
+  
+  // pass texture coordinate into (following) fragment shader.
+  v_texCoord = a_texCoord;
+}
+</script>
+
+<!-- fragment shader -->
+<script id="2d-fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+
+// color field passed in from vertex shader
+varying vec4      v_color;
+
+// extracted/interpolated coord in fragment space
+uniform sampler2D u_texture;
+
+// the texCoords passed in from vertex shader.
+varying vec2      v_texCoord;
+
+void main() 
+{
+  vec2 onedim   = vec2(v_texCoord.x, 0) * (1.0/100.0);
+  vec4 x_color  = texture2D(u_texture, onedim);
+  if (onedim.x > 2.0)
+  { 
+    x_color = vec4(1.0,0.0,0.0,1.0);
+  }
+  float  lambda = 0.0;
+  gl_FragColor  = v_color*(lambda) + x_color*(1.0 - lambda);
+}
+</script>
+
+<script>
+"use strict";
+
+function main() 
+{
+  // Get A WebGL context
+  var canvas = document.getElementById("c");
+  var gl = canvas.getContext("webgl");
+  if (!gl) {
+    return;
+  }
+
+  // Use our boilerplate utils to compile the shaders and link into a program
+  var program = webglUtils.createProgramFromScripts(gl, ["2d-vertex-shader", "2d-fragment-shader"]);
+
+  // lookup uniforms
+  var matrixLocation = gl.getUniformLocation(program, "u_matrix");
+  
+  // look up where the vertex data needs to go.
+  var positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+
+  // lookup the sampler locations.
+  var u_textureLocation = gl.getUniformLocation(program, "u_texture");
+  
+  // look up where the texture coordinates need to go.
+  var texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+ 
+  
+  ///////////////////////////////////////////////////////////
+  // Create a buffer to put three 2d clip space points in
+  var positionBuffer = gl.createBuffer();
+  // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);    
+  setupGeometry(gl);
+  ///////////////////////////////////////////////////////////
+  
+  // provide texture coordinates for the rectangle.
+  var texCoordBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);  
+  setupTextureCoords(gl);
+    
+  var textures = [];  
+  setupTextures();
+  
+  
+  drawScene();
+    
+  function setupTextures()
+  {
+	    var tex    = gl.createTexture();
+	    gl.bindTexture(gl.TEXTURE_2D, tex);
+
+	    var freq   = 4;		
+		var width  = 4096; // Nx1 pixel 1d texture
+		var height = 1;
+		var sz     = 4;
+		var oneDTextureTexels = new Uint8Array(width * sz);
+		for (var ii = 0; ii < width; ++ii) 
+		{			
+			var s = 128 + 127 * Math.sin( ii * 2 * Math.PI / width * freq );
+			oneDTextureTexels[ii*4 + 0] = s;
+			oneDTextureTexels[ii*4 + 1] = s;
+			oneDTextureTexels[ii*4 + 2] = s;
+			oneDTextureTexels[ii*4 + 3] = 255;
+		}
+		
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+					  oneDTextureTexels);
+
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		//gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S,     gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T,     gl.CLAMP_TO_EDGE);                  
+
+		// set which texture units to render with.
+		//gl.uniform1i(u_textureLocation, 0);  // texture unit 0
+		
+	    textures.push(tex);
+  }
+  
+  function drawScene()
+  {
+    webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+
+    // Tell WebGL how to convert from clip space to pixels
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    // Clear the canvas
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // Tell it to use our program (pair of shaders)
+    gl.useProgram(program);
+
+    // Turn on the attribute
+    gl.enableVertexAttribArray(positionAttributeLocation);
+    
+    // Bind positionBuffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    
+    // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
+    var size = 2;          // 2 components per iteration
+    var type = gl.FLOAT;   // the data is 32bit floats
+    var normalize = false; // don't normalize the data
+    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+    var offset = 0;        // start at the beginning of the buffer
+    gl.vertexAttribPointer(
+      positionAttributeLocation, size, type, normalize, stride, offset)
+
+	  
+	gl.enableVertexAttribArray(texCoordLocation);
+    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);    
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    
+	  
+    var translation    = [0, 0];
+    var angleInRadians = 0;
+    var scale          = [gl.canvas.clientWidth/100, gl.canvas.clientHeight/100];  
+  
+    // Compute the matrix
+    var matrix = m3.projection(gl.canvas.clientWidth, gl.canvas.clientHeight);
+    matrix = m3.translate(matrix, translation[0], translation[1]);
+    matrix = m3.rotate(matrix, angleInRadians);
+    matrix = m3.scale(matrix, scale[0], scale[1]);
+
+    // Set the matrix.
+    gl.uniformMatrix3fv(matrixLocation, false, matrix);
+
+	gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+	
+    // draw
+    var primitiveType = gl.TRIANGLES;
+    var offset = 0;
+    var count = 6;
+    gl.drawArrays(primitiveType, offset, count);
+  }
+}
+
+// Fill buffer with values that define triangles.
+// Note, will put values in whatever buffer is currently
+// bound to ARRAY_BUFFER bind point
+function setupGeometry(gl)
+{
+    var positions = [
+         0, 0,
+        100, 0,
+        100, 100,
+         0,  0,
+        100, 100,
+         0, 100,
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+}
+
+function setupTextureCoords(gl)
+{
+   var texcoords = [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0,];
+   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoords), gl.STATIC_DRAW);
+}
+
+main();
+</script>
+</html>
+
