@@ -89,7 +89,7 @@ void main()
   vec2 fragCoordNormalized = gl_FragCoord.xy * (1.0/100.0);
        fragCoordNormalized = v_texCoord * 0.0 + fragCoordNormalized * 1.0;
        
-    float range_scale = 2.5;
+    float range_scale        = 6.0;
     vec4 data_rgba           = range_scale * texture2D(u_texture, onedim);
   
   
